@@ -1,0 +1,35 @@
+# Theos / build
+.theos/
+packages/
+*.deb
+obj/
+_
+
+# Local outputs
+.home/
+.clang-module-cache/
+.venv/
+dist/
+*.ipa
+*.tipa
+*.zip
+
+# macOS / IDE
+.DS_Store
+*.swp
+*~
+xcuserdata/
+*.xcworkspace
+*.xcodeproj
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.pyc
+
+# Secrets
+.env
+.env.*
+*.pem
+.deploy_*

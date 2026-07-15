@@ -5,7 +5,7 @@
 TrollStore multi-profile account switcher: backup/restore app sandbox data, with optional device-ID seed reset on fresh profiles.
 
 - **Author:** [o2ol](https://github.com/o2ol)
-- **Version:** 1.1.0
+- **Version:** 1.1.1
 - **Bundle:** `com.o2ol.switchbox`
 
 ## Support
@@ -21,6 +21,7 @@ TrollStore multi-profile account switcher: backup/restore app sandbox data, with
 
 - Multi-profile save/switch/rename/delete
 - **Fresh profile with local device-ID seed reset**
+- **Editable device-ID seeds** (manual edit / regenerate / apply live)
 - Snapshot: data container + App Groups + Keychain
 - Long-press quick switch, search
 - Light/dark mode, URL schemes

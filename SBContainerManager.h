@@ -62,6 +62,21 @@ typedef void (^SBDoneBlock)(NSError * _Nullable error);
 - (nullable NSDictionary *)deviceIdentityForProfile:(NSString *)profileID
                                           bundleID:(NSString *)bundleID;
 
+/// 生成一套新的本地设备识别码种子
+- (NSDictionary *)generateDeviceIdentity;
+
+/// 规范化用户输入的识别码（UUID 大小写、OpenUDID 去横线等）
+- (NSDictionary *)normalizedDeviceIdentity:(NSDictionary *)identity;
+
+/// 保存并写入配置；可选立即应用到当前运行容器（会先关闭 App）
+- (void)updateDeviceIdentity:(NSDictionary *)identity
+                  forProfile:(NSString *)profileID
+                    bundleID:(NSString *)bundleID
+                 applyToLive:(BOOL)applyToLive
+                scrubExisting:(BOOL)scrubExisting
+                    progress:(nullable SBProgressBlock)progress
+                  completion:(SBDoneBlock)completion;
+
 - (void)switchToProfile:(NSString *)profileID
               bundleID:(NSString *)bundleID
      saveCurrentAsName:(nullable NSString *)autoSaveName

@@ -1006,6 +1006,169 @@
 	return [d isKindOfClass:NSDictionary.class] ? d : nil;
 }
 
+- (NSString *)normalizeUUIDString:(NSString *)raw {
+	if (!raw.length) return @"";
+	NSString *s = [[raw stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet]
+				   stringByTrimmingCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@"{}"]];
+	s = [s stringByReplacingOccurrencesOfString:@" " withString:@""];
+	// accept 32 hex without dashes
+	NSString *hex = [[s stringByReplacingOccurrencesOfString:@"-" withString:@""] uppercaseString];
+	NSCharacterSet *nonHex = [[NSCharacterSet characterSetWithCharactersInString:@"0123456789ABCDEF"] invertedSet];
+	if (hex.length == 32 && [hex rangeOfCharacterFromSet:nonHex].location == NSNotFound) {
+		return [NSString stringWithFormat:@"%@-%@-%@-%@-%@",
+				[hex substringWithRange:NSMakeRange(0, 8)],
+				[hex substringWithRange:NSMakeRange(8, 4)],
+				[hex substringWithRange:NSMakeRange(12, 4)],
+				[hex substringWithRange:NSMakeRange(16, 4)],
+				[hex substringWithRange:NSMakeRange(20, 12)]];
+	}
+	// keep as-is uppercase if already dashed-ish
+	return s.uppercaseString;
+}
+
+- (NSString *)normalizeOpenUDID:(NSString *)raw {
+	if (!raw.length) return @"";
+	NSString *hex = [[[raw stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet]
+					  stringByReplacingOccurrencesOfString:@"-" withString:@""] lowercaseString];
+	NSCharacterSet *nonHex = [[NSCharacterSet characterSetWithCharactersInString:@"0123456789abcdef"] invertedSet];
+	if ([hex rangeOfCharacterFromSet:nonHex].location != NSNotFound) {
+		// allow mixed content, strip invalid
+		NSMutableString *out = [NSMutableString string];
+		for (NSUInteger i = 0; i < hex.length; i++) {
+			unichar c = [hex characterAtIndex:i];
+			if ((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) [out appendFormat:@"%C", c];
+		}
+		hex = out;
+	}
+	if (hex.length > 40) hex = [hex substringToIndex:40];
+	if (hex.length < 16) {
+		// pad with random to avoid empty
+		while (hex.length < 32) {
+			hex = [hex stringByAppendingString:[[NSUUID UUID].UUIDString stringByReplacingOccurrencesOfString:@"-" withString:@""].lowercaseString];
+		}
+		hex = [hex substringToIndex:32];
+	}
+	return hex;
+}
+
+- (NSString *)normalizeSerial:(NSString *)raw {
+	if (!raw.length) return [self randomSerial:12];
+	NSString *s = [[raw stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] uppercaseString];
+	NSMutableString *out = [NSMutableString string];
+	for (NSUInteger i = 0; i < s.length; i++) {
+		unichar c = [s characterAtIndex:i];
+		if ((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) [out appendFormat:@"%C", c];
+	}
+	if (out.length < 8) {
+		[out appendString:[self randomSerial:12 - MIN(out.length, 12)]];
+	}
+	if (out.length > 20) return [out substringToIndex:20];
+	return out;
+}
+
+- (NSDictionary *)normalizedDeviceIdentity:(NSDictionary *)identity {
+	NSDictionary *base = identity.count ? identity : [self generateDeviceIdentity];
+	NSMutableDictionary *out = [base mutableCopy] ?: [NSMutableDictionary dictionary];
+	NSDictionary *gen = [self generateDeviceIdentity];
+	NSString *device = [self normalizeUUIDString:out[@"deviceUUID"] ?: gen[@"deviceUUID"]];
+	NSString *vendor = [self normalizeUUIDString:out[@"vendorUUID"] ?: gen[@"vendorUUID"]];
+	NSString *ad = [self normalizeUUIDString:out[@"advertisingUUID"] ?: gen[@"advertisingUUID"]];
+	NSString *install = [self normalizeUUIDString:out[@"installUUID"] ?: gen[@"installUUID"]];
+	NSString *open = [self normalizeOpenUDID:out[@"openUDID"] ?: gen[@"openUDID"]];
+	NSString *serial = [self normalizeSerial:out[@"serial"] ?: gen[@"serial"]];
+	if (!device.length) device = gen[@"deviceUUID"];
+	if (!vendor.length) vendor = gen[@"vendorUUID"];
+	if (!ad.length) ad = gen[@"advertisingUUID"];
+	if (!install.length) install = gen[@"installUUID"];
+	out[@"deviceUUID"] = device;
+	out[@"vendorUUID"] = vendor;
+	out[@"advertisingUUID"] = ad;
+	out[@"installUUID"] = install;
+	out[@"openUDID"] = open;
+	out[@"serial"] = serial;
+	out[@"updatedAt"] = @(NSDate.date.timeIntervalSince1970);
+	if (!out[@"createdAt"]) out[@"createdAt"] = out[@"updatedAt"];
+	out[@"note"] = @"local seeds only; system IDFV/IDFA need injection to spoof";
+	out[@"editable"] = @YES;
+	return out;
+}
+
+- (void)updateDeviceIdentity:(NSDictionary *)identity
+				  forProfile:(NSString *)profileID
+					bundleID:(NSString *)bundleID
+				 applyToLive:(BOOL)applyToLive
+				scrubExisting:(BOOL)scrubExisting
+					progress:(SBProgressBlock)progress
+				  completion:(SBDoneBlock)completion {
+	dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+		if (!profileID.length || !bundleID.length) {
+			dispatch_async(dispatch_get_main_queue(), ^{ completion([self err:@"参数无效"]); });
+			return;
+		}
+		SBAppInfo *app = [self appInfoForBundleID:bundleID];
+		if (!app) {
+			dispatch_async(dispatch_get_main_queue(), ^{ completion([self err:@"找不到目标 App"]); });
+			return;
+		}
+		NSString *pdir = [self profileDir:bundleID profileID:profileID];
+		if (![[NSFileManager defaultManager] fileExistsAtPath:pdir]) {
+			dispatch_async(dispatch_get_main_queue(), ^{ completion([self err:@"配置不存在"]); });
+			return;
+		}
+		NSDictionary *norm = [self normalizedDeviceIdentity:identity];
+		SBProgressBlock wrap = ^(NSString *msg, double p) {
+			if (progress) dispatch_async(dispatch_get_main_queue(), ^{ progress(msg, p); });
+		};
+
+		wrap(@"写入配置识别码…", 0.1);
+		[norm writeToFile:[pdir stringByAppendingPathComponent:@"device.plist"] atomically:YES];
+
+		NSString *dataPath = [pdir stringByAppendingPathComponent:@"Data"];
+		[[NSFileManager defaultManager] createDirectoryAtPath:dataPath withIntermediateDirectories:YES attributes:nil error:nil];
+		wrap(@"写入配置沙盒…", 0.35);
+		[self seedDeviceIdentity:norm intoContainerPath:dataPath bundleID:bundleID];
+		if (scrubExisting) {
+			wrap(@"清洗配置内已有字段…", 0.5);
+			[self scrubDeviceIdentifiersUnder:dataPath withIdentity:norm];
+		}
+
+		// meta
+		NSMutableDictionary *meta = [self loadMeta:bundleID];
+		NSMutableDictionary *profiles = [meta[@"profiles"] mutableCopy] ?: [NSMutableDictionary dictionary];
+		NSMutableDictionary *pm = [profiles[profileID] mutableCopy] ?: [NSMutableDictionary dictionary];
+		pm[@"resetDeviceIDs"] = @YES;
+		pm[@"deviceUUID"] = norm[@"deviceUUID"] ?: @"";
+		pm[@"vendorUUID"] = norm[@"vendorUUID"] ?: @"";
+		pm[@"updatedAt"] = @(NSDate.date.timeIntervalSince1970);
+		profiles[profileID] = pm;
+		meta[@"profiles"] = profiles;
+		[self saveMeta:meta bundleID:bundleID];
+
+		BOOL isActive = [meta[@"activeProfileID"] isEqualToString:profileID];
+		BOOL doLive = applyToLive || isActive;
+		if (doLive && app.dataPath.length) {
+			wrap(@"关闭目标 App…", 0.6);
+			[self ensureTerminated:bundleID];
+			wrap(@"应用到当前容器…", 0.75);
+			[self seedDeviceIdentity:norm intoContainerPath:app.dataPath bundleID:bundleID];
+			if (scrubExisting) {
+				[self scrubDeviceIdentifiersUnder:app.dataPath withIdentity:norm];
+			}
+			// if this profile is active, refresh snapshot so next switch is consistent
+			if (isActive) {
+				wrap(@"同步活动配置快照…", 0.9);
+				NSError *err = nil;
+				[self saveSnapshotForApp:app profileDir:pdir progress:wrap error:&err];
+				// restore device.plist root after snapshot
+				[norm writeToFile:[pdir stringByAppendingPathComponent:@"device.plist"] atomically:YES];
+				[self seedDeviceIdentity:norm intoContainerPath:[pdir stringByAppendingPathComponent:@"Data"] bundleID:bundleID];
+			}
+		}
+
+		dispatch_async(dispatch_get_main_queue(), ^{ completion(nil); });
+	});
+}
+
 #pragma mark - Operations
 
 - (void)ensureTerminated:(NSString *)bundleID {

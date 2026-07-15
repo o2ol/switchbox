@@ -42,7 +42,8 @@
 			@"• 生成新的本地 device / vendor / advertising UUID\n"
 			@"• 写入 App Preferences 常见字段，并清理 Cookies/WebKit 等会话残留\n\n"
 			@"说明：纯巨魔无法注入系统 API，系统级 IDFV/IDFA 仍可能不变；\n"
-			@"对读取自有存储识别码的 App，新号冷启动更干净。" },
+			@"对读取自有存储识别码的 App，新号冷启动更干净。\n"
+			@"配置菜单 → 编辑设备识别码：可手动修改、单独/全部重生成并写回。" },
 
 		@{ @"title": @"界面操作", @"body":
 			@"• 应用 Tab：点击进入管理；长按快速切号\n"

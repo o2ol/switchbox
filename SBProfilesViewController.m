@@ -1,4 +1,5 @@
 #import "SBProfilesViewController.h"
+#import "SBDeviceIdentityViewController.h"
 #import "SBSettings.h"
 #import "SBCopyUtil.h"
 
@@ -300,30 +301,8 @@
 }
 
 - (void)showDeviceIdentityForProfile:(SBProfileInfo *)profile {
-	NSDictionary *dev = [SBContainerManager.shared deviceIdentityForProfile:profile.profileID bundleID:self.app.bundleID];
-	NSString *msg;
-	if (!dev.count) {
-		msg = profile.resetDeviceIDs
-			? @"该配置标记为已重置，但未找到 device.plist。"
-			: @"该配置未重置设备识别码（从当前现场备份）。";
-	} else {
-		msg = [NSString stringWithFormat:
-			  @"Device: %@\nVendor: %@\nAdvertising: %@\nInstall: %@\nOpenUDID: %@\nSerial: %@\n\n以上为本地写入的识别码种子，供 App 读取自有字段；系统 IDFV/IDFA 无法在纯巨魔下全局伪装。",
-			  dev[@"deviceUUID"] ?: @"-",
-			  dev[@"vendorUUID"] ?: @"-",
-			  dev[@"advertisingUUID"] ?: @"-",
-			  dev[@"installUUID"] ?: @"-",
-			  dev[@"openUDID"] ?: @"-",
-			  dev[@"serial"] ?: @"-"];
-	}
-	UIAlertController *a = [UIAlertController alertControllerWithTitle:profile.name message:msg preferredStyle:UIAlertControllerStyleAlert];
-	__weak typeof(self) weakSelf = self;
-	[a addAction:[UIAlertAction actionWithTitle:@"复制" style:UIAlertActionStyleDefault handler:^(UIAlertAction *_) {
-		SBCopyString(msg);
-		SBPresentCopiedToast(weakSelf, @"识别码");
-	}]];
-	[a addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleCancel handler:nil]];
-	[self presentViewController:a animated:YES completion:nil];
+	SBDeviceIdentityViewController *vc = [[SBDeviceIdentityViewController alloc] initWithApp:self.app profile:profile];
+	[self.navigationController pushViewController:vc animated:YES];
 }
 
 - (void)renameProfileNamed:(SBProfileInfo *)profile {
@@ -448,7 +427,7 @@
 	[sheet addAction:[UIAlertAction actionWithTitle:@"切换到此配置" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *_) {
 		[weakSelf switchTo:p];
 	}]];
-	[sheet addAction:[UIAlertAction actionWithTitle:@"查看设备识别码" style:UIAlertActionStyleDefault handler:^(UIAlertAction *_) {
+	[sheet addAction:[UIAlertAction actionWithTitle:@"编辑设备识别码" style:UIAlertActionStyleDefault handler:^(UIAlertAction *_) {
 		[weakSelf showDeviceIdentityForProfile:p];
 	}]];
 	[sheet addAction:[UIAlertAction actionWithTitle:@"重命名" style:UIAlertActionStyleDefault handler:^(UIAlertAction *_) {

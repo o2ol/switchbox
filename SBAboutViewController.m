@@ -33,7 +33,7 @@ static NSString * const kSBOpenSourceURL = @"https://github.com/o2ol/switchbox";
 	if (section == 0) {
 		return @"切号箱（SwitchBox）\n"
 		@"轻量多配置容器切换工具\n"
-		@"版本：1.1.0\n"
+		@"版本：1.1.1\n"
 		@"Bundle：com.o2ol.switchbox\n"
 		@"作者：o2ol";
 	}

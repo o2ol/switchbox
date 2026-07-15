@@ -35,7 +35,7 @@
 		@{ @"title": @"可执行文件", @"value": exec },
 		@{ @"title": @"最低系统", @"value": [NSString stringWithFormat:@"iOS %@", minOS] },
 		@{ @"title": @"分发方式", @"value": @"TrollStore (tipa/ipa)" },
-		@{ @"title": @"1.1.1 更新", @"value": @"设备识别码可编辑 / 重生成" },
+		@{ @"title": @"1.2.0 更新", @"value": @"设备识别码可编辑 / 重生成" },
 	];
 
 	self.navigationItem.rightBarButtonItem =

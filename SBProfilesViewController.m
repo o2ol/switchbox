@@ -339,94 +339,223 @@
 
 #pragma mark - Table
 
-- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView { return 2; }
+// 0 状态 / 1 配置(分身) / 2 快捷操作 / 3 说明能力边界
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView { return 4; }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-	if (section == 0) return 4;
-	return MAX(self.profiles.count, (NSUInteger)1);
+	if (section == 0) return 2;
+	if (section == 1) return MAX(self.profiles.count, (NSUInteger)0) + 1; // profiles + 新增
+	if (section == 2) return 4;
+	return 1;
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
-	return section == 0 ? @"操作" : @"配置列表";
+	if (section == 1) return @"配置（分身）";
+	if (section == 2) return @"快捷操作";
+	if (section == 3) return @"与 Crane 的差异";
+	return nil;
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
 	if (section == 0) {
-		return [NSString stringWithFormat:@"目标：%@\n%@", self.app.bundleID, self.app.dataPath ?: @"数据路径未知"];
+		return [NSString stringWithFormat:@"目标：%@\n%@", self.app.bundleID ?: @"-", self.app.dataPath ?: @"数据路径未知"];
 	}
-	return @"绿点 = 当前绑定配置。切换时会自动回写当前数据到绑定配置。";
+	if (section == 1) {
+		return @"点配置可切换 / 编辑识别码 / 重命名 / 删除。绿点为当前启动配置。";
+	}
+	if (section == 3) {
+		return @"纯巨魔无法注入 SpringBoard / App 进程，因此不能实现：启动时弹窗选容器、分容器通知 token、独立系统 Apple ID、容器防删除保护等。这些需要越狱插件（如 Crane）。";
+	}
+	return nil;
+}
+
+- (SBProfileInfo *)activeProfile {
+	for (SBProfileInfo *p in self.profiles) {
+		if (p.isActive) return p;
+	}
+	return nil;
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
 	if (indexPath.section == 0) {
-		UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:nil];
-		cell.textLabel.textAlignment = NSTextAlignmentCenter;
 		if (indexPath.row == 0) {
-			cell.textLabel.text = @"从当前新建配置";
+			UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:nil];
+			cell.textLabel.text = @"目前启动配置";
+			SBProfileInfo *active = [self activeProfile];
+			cell.detailTextLabel.text = active.name.length ? active.name : @"（未绑定）";
+			cell.detailTextLabel.textColor = active ? UIColor.secondaryLabelColor : UIColor.tertiaryLabelColor;
+			cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+			return cell;
+		}
+		UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:nil];
+		cell.selectionStyle = UITableViewCellSelectionStyleNone;
+		cell.textLabel.text = @"每次启动 App 时询问选择配置";
+		cell.detailTextLabel.text = @"需进程注入，纯巨魔不可用";
+		cell.detailTextLabel.textColor = UIColor.tertiaryLabelColor;
+		cell.detailTextLabel.numberOfLines = 2;
+		UISwitch *sw = [UISwitch new];
+		sw.on = NO;
+		sw.enabled = NO;
+		cell.accessoryView = sw;
+		cell.textLabel.textColor = UIColor.secondaryLabelColor;
+		return cell;
+	}
+
+	if (indexPath.section == 1) {
+		if (indexPath.row == (NSInteger)self.profiles.count) {
+			// 新增
+			UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:nil];
+			cell.textLabel.text = @"新增";
 			cell.textLabel.textColor = UIColor.systemBlueColor;
-		} else if (indexPath.row == 1) {
-			cell.textLabel.text = @"新建空配置并重置识别码";
-			cell.textLabel.textColor = UIColor.systemPurpleColor;
-		} else if (indexPath.row == 2) {
-			cell.textLabel.text = @"打开目标 App";
-			cell.textLabel.textColor = UIColor.systemBlueColor;
+			cell.accessoryType = UITableViewCellAccessoryNone;
+			return cell;
+		}
+		if (!self.profiles.count) {
+			// shouldn't hit if count+1 and count=0 only shows 新增
+		}
+		SBProfileInfo *p = self.profiles[indexPath.row];
+		UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:nil];
+		cell.textLabel.text = p.name;
+		cell.textLabel.textColor = UIColor.labelColor;
+		NSDateFormatter *f = [NSDateFormatter new];
+		f.dateFormat = @"yyyy-MM-dd HH:mm";
+		NSString *size = [SBContainerManager.shared humanSize:p.sizeBytes];
+		NSMutableString *detail = [NSMutableString stringWithFormat:@"%@ · %@", size, [f stringFromDate:p.createdAt]];
+		if (p.resetDeviceIDs) {
+			[detail appendString:@" · 识别码"];
+			if (p.deviceUUIDShort.length) [detail appendFormat:@" %@", p.deviceUUIDShort];
+		}
+		if (p.isActive) [detail appendString:@" · 当前"];
+		cell.detailTextLabel.text = detail;
+		cell.detailTextLabel.textColor = UIColor.secondaryLabelColor;
+		cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+		if (p.isActive) {
+			UIImageView *dot = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"checkmark.circle.fill"]];
+			dot.tintColor = UIColor.systemGreenColor;
+			cell.accessoryView = nil;
+			// use checkmark via accessory
+			cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+			cell.imageView.image = [UIImage systemImageNamed:@"circle.fill"];
+			cell.imageView.tintColor = UIColor.systemGreenColor;
 		} else {
-			cell.textLabel.text = @"强制关闭目标 App";
-			cell.textLabel.textColor = UIColor.systemOrangeColor;
+			cell.imageView.image = [UIImage systemImageNamed:@"circle"];
+			cell.imageView.tintColor = UIColor.tertiaryLabelColor;
 		}
 		return cell;
 	}
 
-	if (!self.profiles.count) {
+	if (indexPath.section == 2) {
 		UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:nil];
-		cell.textLabel.text = @"暂无配置，点上方新建";
-		cell.textLabel.textColor = UIColor.secondaryLabelColor;
-		cell.selectionStyle = UITableViewCellSelectionStyleNone;
+		cell.textLabel.textAlignment = NSTextAlignmentLeft;
+		if (indexPath.row == 0) {
+			cell.textLabel.text = @"打开目标 App";
+			cell.imageView.image = [UIImage systemImageNamed:@"arrow.up.forward.app"];
+			cell.imageView.tintColor = UIColor.systemBlueColor;
+		} else if (indexPath.row == 1) {
+			cell.textLabel.text = @"强制关闭目标 App";
+			cell.imageView.image = [UIImage systemImageNamed:@"xmark.circle"];
+			cell.imageView.tintColor = UIColor.systemOrangeColor;
+		} else if (indexPath.row == 2) {
+			cell.textLabel.text = @"从当前新建配置";
+			cell.imageView.image = [UIImage systemImageNamed:@"plus.circle"];
+			cell.imageView.tintColor = UIColor.systemBlueColor;
+		} else {
+			cell.textLabel.text = @"新建空配置并重置识别码";
+			cell.imageView.image = [UIImage systemImageNamed:@"arrow.triangle.2.circlepath.circle"];
+			cell.imageView.tintColor = UIColor.systemPurpleColor;
+		}
+		cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
 		return cell;
 	}
 
-	SBProfileInfo *p = self.profiles[indexPath.row];
+	// section 3
 	UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:nil];
-	cell.textLabel.text = [NSString stringWithFormat:@"%@%@", p.isActive ? @"● " : @"", p.name];
-	cell.textLabel.textColor = p.isActive ? UIColor.systemGreenColor : UIColor.labelColor;
-	NSDateFormatter *f = [NSDateFormatter new];
-	f.dateFormat = @"yyyy-MM-dd HH:mm";
-	NSString *size = [SBContainerManager.shared humanSize:p.sizeBytes];
-	NSMutableString *detail = [NSMutableString stringWithFormat:@"%@ · %@", size, [f stringFromDate:p.createdAt]];
-	if (p.resetDeviceIDs) {
-		[detail appendString:@" · 识别码已重置"];
-		if (p.deviceUUIDShort.length) [detail appendFormat:@"(%@)", p.deviceUUIDShort];
-	}
-	cell.detailTextLabel.text = detail;
+	cell.selectionStyle = UITableViewCellSelectionStyleNone;
+	cell.textLabel.text = @"本工具能力边界";
+	cell.detailTextLabel.numberOfLines = 0;
+	cell.detailTextLabel.text = @"支持：多配置备份切换、空配置、可编辑设备识别码种子、Keychain 快照。\n不支持：启动拦截选容器、分容器推送、独立 Apple ID（需 Crane 类注入）。";
 	cell.detailTextLabel.textColor = UIColor.secondaryLabelColor;
-	cell.accessoryType = UITableViewCellAccessoryDetailDisclosureButton;
 	return cell;
 }
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
 	[tableView deselectRowAtIndexPath:indexPath animated:YES];
+
 	if (indexPath.section == 0) {
 		if (indexPath.row == 0) {
-			[self createProfileFromCurrent];
-		} else if (indexPath.row == 1) {
-			[self createFreshProfileResettingDevice:YES];
-		} else if (indexPath.row == 2) {
-			NSError *err = nil;
-			[SBContainerManager.shared openApp:self.app.bundleID error:&err];
-			if (err) [self presentError:err];
-		} else {
-			[SBContainerManager.shared terminateApp:self.app.bundleID error:nil];
-			[self toast:@"已发送关闭指令"];
+			[self pickActiveProfile];
 		}
 		return;
 	}
-	if (!self.profiles.count) return;
-	SBProfileInfo *p = self.profiles[indexPath.row];
-	UIAlertController *sheet = [UIAlertController alertControllerWithTitle:p.name message:nil preferredStyle:UIAlertControllerStyleActionSheet];
+
+	if (indexPath.section == 1) {
+		if (indexPath.row == (NSInteger)self.profiles.count) {
+			[self showCreateMenu];
+			return;
+		}
+		if (!self.profiles.count) return;
+		SBProfileInfo *p = self.profiles[indexPath.row];
+		[self presentProfileActions:p fromIndexPath:indexPath];
+		return;
+	}
+
+	if (indexPath.section == 2) {
+		if (indexPath.row == 0) {
+			NSError *err = nil;
+			[SBContainerManager.shared openApp:self.app.bundleID error:&err];
+			if (err) [self presentError:err];
+		} else if (indexPath.row == 1) {
+			[SBContainerManager.shared terminateApp:self.app.bundleID error:nil];
+			[self toast:@"已发送关闭指令"];
+		} else if (indexPath.row == 2) {
+			[self createProfileFromCurrent];
+		} else {
+			[self createFreshProfileResettingDevice:YES];
+		}
+	}
+}
+
+- (void)pickActiveProfile {
+	if (!self.profiles.count) {
+		[self toast:@"还没有配置，请先新增"];
+		return;
+	}
+	UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"选择启动配置"
+																   message:@"切换后会关闭目标 App 并替换数据容器"
+															preferredStyle:UIAlertControllerStyleActionSheet];
 	__weak typeof(self) weakSelf = self;
-	[sheet addAction:[UIAlertAction actionWithTitle:@"切换到此配置" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *_) {
-		[weakSelf switchTo:p];
-	}]];
+	for (SBProfileInfo *p in self.profiles) {
+		NSString *title = p.isActive ? [NSString stringWithFormat:@"● %@（当前）", p.name] : p.name;
+		UIAlertAction *act = [UIAlertAction actionWithTitle:title
+													  style:p.isActive ? UIAlertActionStyleDefault : UIAlertActionStyleDestructive
+													handler:^(UIAlertAction *_) {
+			if (!p.isActive) [weakSelf switchTo:p];
+		}];
+		[sheet addAction:act];
+	}
+	[sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+	UIPopoverPresentationController *pop = sheet.popoverPresentationController;
+	if (pop) {
+		pop.sourceView = self.tableView;
+		pop.sourceRect = [self.tableView rectForRowAtIndexPath:[NSIndexPath indexPathForRow:0 inSection:0]];
+	}
+	[self presentViewController:sheet animated:YES completion:nil];
+}
+
+- (void)presentProfileActions:(SBProfileInfo *)p fromIndexPath:(NSIndexPath *)indexPath {
+	UIAlertController *sheet = [UIAlertController alertControllerWithTitle:p.name
+																   message:p.isActive ? @"当前启动配置" : nil
+															preferredStyle:UIAlertControllerStyleActionSheet];
+	__weak typeof(self) weakSelf = self;
+	if (!p.isActive) {
+		[sheet addAction:[UIAlertAction actionWithTitle:@"切换到此配置" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *_) {
+			[weakSelf switchTo:p];
+		}]];
+	} else {
+		[sheet addAction:[UIAlertAction actionWithTitle:@"打开目标 App" style:UIAlertActionStyleDefault handler:^(UIAlertAction *_) {
+			[SBContainerManager.shared openApp:weakSelf.app.bundleID error:nil];
+		}]];
+	}
 	[sheet addAction:[UIAlertAction actionWithTitle:@"编辑设备识别码" style:UIAlertActionStyleDefault handler:^(UIAlertAction *_) {
 		[weakSelf showDeviceIdentityForProfile:p];
 	}]];
@@ -439,21 +568,20 @@
 	[sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
 	UIPopoverPresentationController *pop = sheet.popoverPresentationController;
 	if (pop) {
-		pop.sourceView = tableView;
-		pop.sourceRect = [tableView rectForRowAtIndexPath:indexPath];
+		pop.sourceView = self.tableView;
+		pop.sourceRect = [self.tableView rectForRowAtIndexPath:indexPath];
 	}
 	[self presentViewController:sheet animated:YES completion:nil];
 }
 
 - (void)tableView:(UITableView *)tableView accessoryButtonTappedForRowWithIndexPath:(NSIndexPath *)indexPath {
-	if (indexPath.section != 1 || !self.profiles.count) return;
+	if (indexPath.section != 1 || indexPath.row >= (NSInteger)self.profiles.count) return;
 	SBProfileInfo *p = self.profiles[indexPath.row];
-	[self tableView:tableView didSelectRowAtIndexPath:indexPath];
-	(void)p;
+	[self presentProfileActions:p fromIndexPath:indexPath];
 }
 
 - (UISwipeActionsConfiguration *)tableView:(UITableView *)tableView trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
-	if (indexPath.section != 1 || !self.profiles.count) return nil;
+	if (indexPath.section != 1 || indexPath.row >= (NSInteger)self.profiles.count) return nil;
 	SBProfileInfo *p = self.profiles[indexPath.row];
 	__weak typeof(self) weakSelf = self;
 	UIContextualAction *del = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleDestructive title:@"删除" handler:^(__kindof UIContextualAction *action, __kindof UIView *sourceView, void (^completionHandler)(BOOL)) {
@@ -461,11 +589,17 @@
 		completionHandler(YES);
 	}];
 	UIContextualAction *sw = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleNormal title:@"切换" handler:^(__kindof UIContextualAction *action, __kindof UIView *sourceView, void (^completionHandler)(BOOL)) {
-		[weakSelf switchTo:p];
+		if (!p.isActive) [weakSelf switchTo:p];
 		completionHandler(YES);
 	}];
 	sw.backgroundColor = UIColor.systemBlueColor;
-	return [UISwipeActionsConfiguration configurationWithActions:@[del, sw]];
+	UIContextualAction *ids = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleNormal title:@"识别码" handler:^(__kindof UIContextualAction *action, __kindof UIView *sourceView, void (^completionHandler)(BOOL)) {
+		[weakSelf showDeviceIdentityForProfile:p];
+		completionHandler(YES);
+	}];
+	ids.backgroundColor = UIColor.systemPurpleColor;
+	return [UISwipeActionsConfiguration configurationWithActions:@[del, sw, ids]];
 }
+
 
 @end

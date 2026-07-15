@@ -1,8 +1,8 @@
 Package: com.o2ol.switchbox
 Name: SwitchBox
-Version: 1.1.1
+Version: 1.2.0
 Architecture: iphoneos-arm
-Description: TrollStore multi-profile account switcher with editable device-ID seeds.
+Description: TrollStore multi-profile account switcher with Crane-style app page and editable device IDs.
 Maintainer: o2ol
 Author: o2ol
 Section: Utilities

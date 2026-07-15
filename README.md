@@ -5,7 +5,7 @@
 TrollStore 多配置切号工具：备份/切换 App 沙盒数据，支持新建空配置并重置本地设备识别码。
 
 - **作者：** [o2ol](https://github.com/o2ol)
-- **版本：** 1.1.1
+- **版本：** 1.2.0
 - **Bundle：** `com.o2ol.switchbox`
 
 ## 支持
